@@ -1,22 +1,29 @@
-from telegram import Update
-from telegram.ext import Application, ConversationHandler, CommandHandler, MessageHandler, ContextTypes, ReplyKeyboardMarkup, filters
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import Application, ConversationHandler, CommandHandler, MessageHandler, ContextTypes, filters
 import re
 
+from dotenv import load_dotenv
+import os
 
-ACTION, CONFIRMATION = range(2)
+
+load_dotenv()
+
+CHOOSE_ACTION, ACTION, CONFIRMATION = range(3)
 
 def main():
-    application = Application.builder().token("").build()
+    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            ACTION: [MessageHandler(filters.REGEX("^Add(.+)?$"), add_order), 
-                    MessageHandler(filters.REGEX("^Delete(.+)?$"), delete_order)],
-            CONFIRMATION: [MessageHandler(filters.REGEX("^YES$"), confirm_action), 
-                            MessageHandler(filters.REGEX("^NO$"), start)],
+            CHOOSE_ACTION: [MessageHandler(filters.Regex("^Add(.+)?$"), add_action), 
+                    MessageHandler(filters.Regex("^Delete(.+)?$"), delete_order)],
+            ACTION: [MessageHandler(filters.Regex("^(.+) (.+) (.+) (.+) (\d+) (\d+)$"), add_order), 
+                    MessageHandler(filters.ALL, invalid_input)],
+            CONFIRMATION: [MessageHandler(filters.Regex("^Yes$"), confirm_action), 
+                            MessageHandler(filters.Regex("^No$"), start)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[MessageHandler(filters.ALL, error_fallback)],
     )
 
     application.add_handler(conv_handler)
@@ -24,58 +31,66 @@ def main():
     application.run_polling()
 
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Action canceled.")
+async def error_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Error occured. Please try again.")
     return await start(update, context)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
     user_data["action"] = None
-    user_data["order_info"] = None
+    if update.message.text == "/start":
+        user_data["order_info"] = None
 
     reply_keyboard = [["Add order", "Delete last order"]]
-    reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+    reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text("Please choose an action:", reply_markup=reply_markup)
+    return CHOOSE_ACTION
+
+
+async def add_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data = context.user_data
+    user_data["action"] = "add"
+
+    await update.message.reply_text("Please enter the order details:")
+
     return ACTION
 
 
 async def add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
-
-    await update.message.reply_text("Please enter the order details:")
-
     order = update.message.text
     pattern = r"^(.+) (.+) (.+) (.+) (\d+) (\d+)$"
     matched_order = re.match(pattern, order)
-    if matched_order:
-        lastname = matched_order[1]
-        name = matched_order[2]
-        middlename = matched_order[3]
-        company = matched_order[4]
-        boxes = matched_order[5]
-        sum = matched_order[6]
 
-        order_info = {
-            "lastname": lastname,
-            "name": name,
-            "middlename": middlename,
-            "company": company,
-            "boxes": boxes,
-            "sum": sum,
-        }
+    lastname = matched_order[1]
+    name = matched_order[2]
+    middlename = matched_order[3]
+    company = matched_order[4]
+    boxes = matched_order[5]
+    sum = matched_order[6]
 
-        reply_keyboard = [["YES", "NO"]]
-        reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
-        await update.message.reply_text(f"{order_info}\nDo you want to add this order to the google sheet?", reply_markup=reply_markup)
+    order_info = {
+        "lastname": lastname,
+        "name": name,
+        "middlename": middlename,
+        "company": company,
+        "boxes": boxes,
+        "sum": sum,
+    }
 
-        user_data["order_info"] = order_info
-        user_data["action"] = "add"
+    reply_keyboard = [["Yes", "No"]]
+    reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
+    await update.message.reply_text(f"{order_info}\nDo you want to add this order to the google sheet?", reply_markup=reply_markup)
 
-        return CONFIRMATION
-    else:
-        await update.message.reply_text("Invalid order details. Please try again.")
-        return await add_order(update, context)
+    user_data["order_info"] = order_info
+
+    return CONFIRMATION
+
+
+async def invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Invalid input. Please try again.")
+    return await add_action(update, context)
 
 
 async def delete_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,7 +98,7 @@ async def delete_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_data["order_info"]:
         reply_keyboard = [["Yes", "No"]]
-        reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
 
         await update.message.reply_text(f"Last order info: {user_data['order_info']}\nDo you want to delete it?", reply_markup=reply_markup)
 
@@ -99,11 +114,12 @@ async def confirm_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
     if user_data["action"] == "add":
         order_info = user_data["order_info"]
-        pass
-        #  TODO: Add some code to add the order to the google sheet
+        await update.message.reply_text(f"Order added: {order_info}")
     elif user_data["action"] == "delete":
-        pass
-        #  TODO: Add some code to delete the last order from the google sheet
+        order_info = user_data["order_info"]
+        await update.message.reply_text(f"Order deleted: {order_info}")
+        user_data["order_info"] = None
     else:
         await update.message.reply_text("Invalid action.")
-        return await start(update, context)
+
+    return await start(update, context)
