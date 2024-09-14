@@ -24,9 +24,7 @@ class GSheet:
 
     def add_row(self, data):
         row = self.get_last_row()
-        for key in data.keys():
-            col = self.row_template[key]
-            self.sheet.update_cell(row, col, data[key])
+        self.sheet.append_row(list(data.values()))
 
     def delete_last_row(self):
         self.sheet.delete_rows(self.get_last_row() - 1)

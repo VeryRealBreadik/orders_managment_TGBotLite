@@ -1,6 +1,7 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ConversationHandler, CommandHandler, MessageHandler, ContextTypes, filters, PicklePersistence
 import re
+from functools import wraps
 
 from ..gsheets.gsheets import GSheet
 
@@ -9,9 +10,10 @@ CHOOSE_ACTION, ACTION, CONFIRMATION = range(3)
 
 
 class Bot:
-    def __init__(self, token: str, sheet: GSheet):
+    def __init__(self, token: str, sheet: GSheet, authorized_user):
         self.token = token
         self.sheet = sheet
+        self.authorized_user = authorized_user
         self.persistence = PicklePersistence(filepath="mainbot.pkl")
         self.application = ApplicationBuilder().token(self.token).persistence(self.persistence).build()
 
@@ -40,6 +42,17 @@ class Bot:
         await self.application.updater.start_polling()
 
 
+    def restricted(func):
+        @wraps(func)
+        def wrapped(update, context, *args, **kwargs):
+            user_id = update.effective_user.id
+            if user_id not in LIST_OF_ADMINS:
+                print("Unauthorized access denied for {}.".format(user_id))
+                return
+            return func(update, context, *args, **kwargs)
+        return wrapped
+
+
     async def error_fallback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Произошла ошибка, пожалуйста, попробуйте снова.")
         return await self.start_cmd(update, context)
@@ -50,7 +63,6 @@ class Bot:
         user_data["action"] = None
         if update.message.text == "/start":
             user_data["order_info"] = None
-
         reply_keyboard = [["Добавить заказ", "Удалить последний заказ"]]
         reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
         await update.message.reply_text("Пожалуйста, выберите действие:", reply_markup=reply_markup)

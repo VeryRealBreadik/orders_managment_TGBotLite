@@ -15,7 +15,7 @@ load_gsheet(scopes=scopes, credentials=credentials, sheet_id=sheet_id)
 
 
 async def main():
-    await start_bot(os.getenv("BOT_TOKEN"))
+    await start_bot(os.getenv("BOT_TOKEN"), os.getenv("AUTHORIZED_USER"))
 
     stop_event = asyncio.Event()
     await stop_event.wait()

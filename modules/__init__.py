@@ -13,8 +13,8 @@ def load_gsheet(scopes, credentials, sheet_id):
         sys.exit()
 
 
-async def start_bot(bot_token):
+async def start_bot(bot_token, authorized_user):
     global gsheet
 
-    bot = Bot(bot_token, gsheet)
+    bot = Bot(bot_token, gsheet, authorized_user)
     await bot.start()
