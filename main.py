@@ -11,11 +11,12 @@ load_dotenv("essentials/.env")
 scopes = [os.getenv("SCOPES")]
 credentials = os.getenv("CREDENTIALS_FILE")
 sheet_id = os.getenv("SHEET_ID")
-load_gsheet(scopes=scopes, credentials=credentials, sheet_id=sheet_id)
+table_range = os.getenv("TABLE_RANGE")
+load_gsheet(scopes=scopes, credentials=credentials, sheet_id=sheet_id, table_range=table_range)
 
 
 async def main():
-    await start_bot(os.getenv("BOT_TOKEN"), os.getenv("AUTHORIZED_USER"))
+    await start_bot(bot_token=os.getenv("BOT_TOKEN"))
 
     stop_event = asyncio.Event()
     await stop_event.wait()
